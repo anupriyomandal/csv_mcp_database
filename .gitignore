@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / secrets — never commit your API key
+.env
+
+# Database — exclude live data, keep only the schema (empty file)
+db.csv
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
