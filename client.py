@@ -48,8 +48,10 @@ SYSTEM_PROMPT = (
     "1. Call each tool AT MOST ONCE per user request. Never repeat a tool call.\n"
     "2. For listing or counting records, call get_people ONCE then derive the answer "
     "from the returned data yourself (e.g. count the items in the list).\n"
-    "3. When the user asks to list records, output ONLY the raw JSON array — no extra text.\n"
-    "4. For non-database questions (e.g. general knowledge), answer directly without calling any tool."
+    "3. Always respond in natural language. When listing records, include a JSON array "
+    "of the records at the END of your response so the client can render a table, BUT "
+    "also include a brief natural language summary (e.g. 'Here are the 3 people in the database:').\n"
+    "4. For non-database questions, answer directly without calling any tool."
 )
 
 
@@ -200,14 +202,28 @@ async def agent_loop(oai_client: OpenAI) -> None:
                             args = json.loads(tc.function.arguments)
                             tool_result = await session.call_tool(tc.function.name, args)
 
-                            # Extract text content from the MCP result
-                            result_text = ""
-                            if tool_result.content:
-                                first = tool_result.content[0]
-                                if hasattr(first, "text"):
-                                    result_text = first.text
+                            # Extract ALL text content from the MCP result.
+                            # FastMCP splits list results into separate TextContent
+                            # items, each containing one JSON object. We detect this
+                            # pattern and wrap them into a proper JSON array so the
+                            # LLM sees the full dataset.
+                            parts = []
+                            for item in (tool_result.content or []):
+                                if hasattr(item, "text"):
+                                    parts.append(item.text)
                                 else:
-                                    result_text = str(first)
+                                    parts.append(str(item))
+
+                            # If we have multiple parts that each look like JSON
+                            # objects, wrap them into a JSON array.
+                            if len(parts) > 1:
+                                try:
+                                    parsed = [json.loads(p) for p in parts]
+                                    result_text = json.dumps(parsed)
+                                except (json.JSONDecodeError, ValueError):
+                                    result_text = "\n".join(parts)
+                            else:
+                                result_text = "\n".join(parts)
 
                             messages.append({
                                 "role": "tool",
